@@ -5,6 +5,13 @@
         "string_view": "cpp",
         "atomic": "cpp",
         "cstddef": "cpp",
-        "__atomic": "cpp"
+        "__atomic": "cpp",
+        "deque": "cpp",
+        "vector": "cpp",
+        "iterator": "cpp",
+        "initializer_list": "cpp",
+        "unordered_map": "cpp",
+        "tuple": "cpp",
+        "functional": "cpp"
     }
 }

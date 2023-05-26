@@ -88,8 +88,8 @@ __device__ void performMapping(int maps[][LEVELS], uchar targetImg[][CHANNELS], 
 }
 // Our functions from ex 1 end
 
-__global__
-void process_image_kernel(uchar *targets, uchar *refrences, uchar *results) {
+__device__
+void process_image(uchar *targets, uchar *references, uchar *results) {
     int tid = threadIdx.x;;
     int threads = blockDim.x;
     int bid = blockIdx.x;
@@ -103,7 +103,7 @@ void process_image_kernel(uchar *targets, uchar *refrences, uchar *results) {
     zero_array((int*)deleta_cdf_row,            LEVELS);
 
     auto target   = (uchar(*)[CHANNELS]) &targets[  bid * img_size];
-    auto refrence = (uchar(*)[CHANNELS]) &refrences[bid * img_size];
+    auto refrence = (uchar(*)[CHANNELS]) &references[bid * img_size];
     auto result   = (uchar(*)[CHANNELS]) &results[  bid * img_size];
 
     colorHist(target, histogramsShared_target);
@@ -134,6 +134,11 @@ void process_image_kernel(uchar *targets, uchar *refrences, uchar *results) {
     //Preform Map
     performMapping(map_cdf, target, result); 
     __syncthreads(); 
+}
+
+__global__
+void process_image_kernel(uchar *targets, uchar *references, uchar *results){
+    process_image(targets, references, results);
 }
 
 class streams_server : public image_processing_server

@@ -17,8 +17,8 @@ private:
 
     cuda::atomic<bool> lock;
     
-    const int que_max = 16;
-    Job que[16];
+    static const int que_max = 16;
+    Job que[que_max];
     int front_of_que = 0;
     int size = 0;
 
