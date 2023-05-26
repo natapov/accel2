@@ -38,8 +38,8 @@ public:
         return false;
 
         // TODO query (don't block) streams for any completed requests.
-        //for ()
-        //{
+        for ()
+        {
             cudaError_t status = cudaStreamQuery(0); // TODO query diffrent stream each iteration
             switch (status) {
             case cudaSuccess:
@@ -52,7 +52,7 @@ public:
                 CUDA_CHECK(status);
                 return false;
             }
-        //}
+        }
     }
 };
 
@@ -65,36 +65,64 @@ std::unique_ptr<image_processing_server> create_streams_server()
 // TODO implement the persistent kernel
 // TODO implement a function for calculating the threadblocks count
 
+typedef struct Job {
+    int job_id;
+    uchar* target;
+    uchar* reference;
+    uchar* result;
+}Job;
+
 class queue_server : public image_processing_server
 {
 private:
-    // TODO define queue server context (memory buffers, etc...)
+    Job* que;
+    const int que_max = 16;
+    int front_of_que = 0;
+    int size = 0;
+    bool done = false;
+
 public:
-    queue_server(int threads)
-    {
+    Job& operator[](int index) {
+        return que[index % que_max];
+    }
+
+
+    queue_server(int threads) {
+        CUDA_CHECK( cudaMalloc((void**)&que, que_max * sizeof(Job)));
+
         // TODO initialize host state
         // TODO launch GPU persistent kernel with given number of threads, and calculated number of threadblocks
     }
 
-    ~queue_server() override
-    {
-        // TODO free resources allocated in constructor
+    ~queue_server() override {
+        CUDA_CHECK( cudaFree((void*) que) );
     }
 
     bool enqueue(int job_id, uchar *target, uchar *reference, uchar *result) override
     {
-        // TODO push new task into queue if possible
-        return false;
+        //lock
+        bool success = false;
+        if(size < que_max) {
+            que[front_of_que + size] = {job_id, target, reference, result};
+            size += 1;
+            success = true;
+        }
+        //unlock
+        return success;
     }
 
     bool dequeue(int *job_id) override
     {
-        // TODO query (don't block) the producer-consumer queue for any responses.
-        return false;
-
-        // TODO return the job_id of the request that was completed.
-        //*job_id = ... 
-        return true;
+        //lock
+        bool success = false;
+        if(done) {
+            success = true;
+            *job_id = que[front_of_que].job_id;
+            size -= 1;
+            front_of_que += 1;
+        }
+        //unlock
+        return success;
     }
 };
 
