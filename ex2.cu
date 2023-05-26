@@ -253,6 +253,22 @@ public:
         lock.store(false, cuda::memory_order_release);
         return success;
     }
+
+    __device__ __host__ bool enqueue(int job_id, uchar* target, uchar* reference, uchar* result) {
+        while (lock.exchange(true ,cuda::memory_order_relaxed) == false);
+        cuda::atomic_thread_fence(cuda::memory_order_acquire, cuda::thread_scope_system);
+
+        bool success = false;
+        if(size < que_max) {
+            que[(front_of_que + size)%que_max] = {job_id, target, reference, result};
+            // que[front_of_que + size] = {job_id, target, reference, result};
+
+            size += 1;
+            success = true;
+        }
+        lock.store(false, cuda::memory_order_release);
+        return success;
+    }
 };
 
 __global__ void kernel(Que* input, Que* output)
@@ -316,19 +332,17 @@ public:
 
     bool enqueue(int job_id, uchar *target, uchar *reference, uchar *result) override
     {
+        return que_host_to_gpu->enqueue(job_id, target, reference, result);
     }
 
     bool dequeue(int *job_id) override
     {
-        //lock
+        Job* job;
         bool success = false;
-        if(done) {
-            success = true;
-            *job_id = que[front_of_que].job_id;
-            size -= 1;
-            front_of_que += 1;
+        if(que_gpu_to_host->dequeue(job)) {
+            *job_id = job->job_id;
+            success= true;
         }
-        //unlock
         return success;
     }
 };
