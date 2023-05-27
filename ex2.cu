@@ -325,7 +325,31 @@ __global__ void kernel(Que* que_host_to_gpu, Que* que_gpu_to_host, bool* running
 // TODO implement a function for calculating the threadblocks count
 __host__
 int calculate_blocks_num(int threads) {
-    return 2;
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+    int number_of_sm = prop.multiProcessorCount;
+    int threads_per_block = 256;
+    
+    int min_blocks = threads/threads_per_block;
+
+    int registers_per_thread = 32;
+    int registers_per_block = registers_per_thread * threads_per_block; 
+    int regs_per_sm  = prop.regsPerMultiprocessor;
+    int total_regs = regs_per_sm * number_of_sm;
+
+    min_blocks = min(min_blocks, total_regs/registers_per_block);
+
+    int threads_per_sm = prop.maxThreadsPerMultiProcessor;
+    int total_threads = number_of_sm * threads_per_sm;
+
+    min_blocks = min(min_blocks, total_threads/threads_per_block);
+
+    int shared_mem_per_sm = prop.sharedMemPerMultiprocessor;
+    int total_shared_mem = number_of_sm * shared_mem_per_sm;
+    int shared_mem_per_block = 10280;
+
+    min_blocks = min(min_blocks, total_shared_mem/shared_mem_per_block);
+    return min_blocks;
 }
 
 
@@ -346,7 +370,7 @@ public:
         int blocks = calculate_blocks_num(threads);
         cudaMallocHost(&pinned_host_buffer, 2 * blocks * sizeof(Que));
         cudaMallocHost(&running, sizeof(bool));
-
+        printf("NUMBER OF BLOCKS: %d\n", blocks);
         // Use placement new operator to construct our class on the pinned buffer
         for(int i = 0; i < 2 * blocks; i++) {
             new (pinned_host_buffer + i * sizeof(Que)) Que();

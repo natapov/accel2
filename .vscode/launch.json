@@ -20,7 +20,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/ex2",
             "preLaunchTask": "make",
-            "args": "queue 256 0",
+            "args": "queue 512 0",
             //"initCommands": ["set cuda api_failures stop"]
         },    
     ]
