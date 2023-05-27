@@ -12,6 +12,7 @@
         "initializer_list": "cpp",
         "unordered_map": "cpp",
         "tuple": "cpp",
-        "functional": "cpp"
+        "functional": "cpp",
+        "utility": "cpp"
     }
 }

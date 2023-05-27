@@ -3,6 +3,7 @@
 using namespace std;
 
 #define NUM_STREAMS 64
+#define QUE_MAX 16
 
 // Our functions from ex 1
 const int img_size = SIZE * SIZE * CHANNELS;
@@ -68,7 +69,8 @@ __device__ void colorHist(uchar img[][CHANNELS], int histograms[][LEVELS]) {
         const int color = i%3;
         const int pixel = i/3;
         assert(pixel < pic_size);
-        atomicAdd(&histograms[color][img[pixel][color]], 1);
+        int temp = img[pixel][color];
+        atomicAdd(&histograms[color][temp], 1);
     }
 }
 
@@ -88,20 +90,19 @@ __device__ void performMapping(int maps[][LEVELS], uchar targetImg[][CHANNELS], 
 }
 // Our functions from ex 1 end
 
-
-
-__device__ void process_image(uchar *targets, uchar *references, uchar *results,int deleta_cdf_row[LEVELS], int map_cdf[][LEVELS], int histogramsShared_target[][LEVELS], int histogramsShared_refrence[][LEVELS]) {
+__device__ void process_image(uchar *targets, uchar *references, uchar *results, int deleta_cdf_row[LEVELS], int map_cdf[][LEVELS], int histogramsShared_target[][LEVELS], int histogramsShared_refrence[][LEVELS]) {
     int tid = threadIdx.x;;
     int threads = blockDim.x;
     int bid = blockIdx.x;
+    assert(targets && references && results);
     zero_array((int*)histogramsShared_target,   CHANNELS * LEVELS);
     zero_array((int*)histogramsShared_refrence, CHANNELS * LEVELS);
     zero_array((int*)map_cdf,                   CHANNELS * LEVELS);
     zero_array((int*)deleta_cdf_row,            LEVELS);
 
-    auto target   = (uchar(*)[CHANNELS]) &targets[  bid * img_size];
-    auto refrence = (uchar(*)[CHANNELS]) &references[bid * img_size];
-    auto result   = (uchar(*)[CHANNELS]) &results[  bid * img_size];
+    auto target   = (uchar(*)[CHANNELS]) &targets;
+    auto refrence = (uchar(*)[CHANNELS]) &references;
+    auto result   = (uchar(*)[CHANNELS]) &results;
 
     colorHist(target, histogramsShared_target);
     colorHist(refrence, histogramsShared_refrence);
@@ -207,90 +208,6 @@ std::unique_ptr<image_processing_server> create_streams_server()
     return std::make_unique<streams_server>();
 }
 
-class Que
-{
-private:
-    // On each use of the flag, we switch the meaning of its values (true/false -> data is ready/not-ready)
-
-    cuda::atomic<bool> lock;
-    
-    static const int que_max = 16;
-    Job que[que_max];
-    int front_of_que = 0;
-    int size = 0;
-
-public:
-    Que() : lock(false){
-    }
-
-    __device__ __host__ bool dequeue(Job* job)
-    {
-        bool success = false;
-        while (lock.exchange(true ,cuda::memory_order_relaxed) == false);
-        cuda::atomic_thread_fence(cuda::memory_order_acquire, cuda::thread_scope_system);
-        if(size) {
-            *job = que[front_of_que%que_max];
-            size -= 1;
-            front_of_que += 1;
-            success = true;
-        }
-        lock.store(false, cuda::memory_order_release);
-        return success;
-    }
-
-    __device__ __host__ bool enqueue(Job& job) {
-        while (lock.exchange(true ,cuda::memory_order_relaxed) == false);
-        cuda::atomic_thread_fence(cuda::memory_order_acquire, cuda::thread_scope_system);
-
-        bool success = false;
-        if(size < que_max) {
-            que[(front_of_que + size)%que_max] = job;
-            // que[front_of_que + size] = {job_id, target, reference, result};
-
-            size += 1;
-            success = true;
-        }
-        lock.store(false, cuda::memory_order_release);
-        return success;
-    }
-
-    __device__ __host__ bool enqueue(int job_id, uchar* target, uchar* reference, uchar* result) {
-        while (lock.exchange(true ,cuda::memory_order_relaxed) == false);
-        cuda::atomic_thread_fence(cuda::memory_order_acquire, cuda::thread_scope_system);
-
-        bool success = false;
-        if(size < que_max) {
-            que[(front_of_que + size)%que_max] = {job_id, target, reference, result};
-            // que[front_of_que + size] = {job_id, target, reference, result};
-
-            size += 1;
-            success = true;
-        }
-        lock.store(false, cuda::memory_order_release);
-        return success;
-    }
-};
-
-__global__ void kernel(Que* input, Que* output)
-{
-    __shared__ int deleta_cdf_row[LEVELS];
-    __shared__ int map_cdf[CHANNELS][LEVELS];
-    __shared__ int histogramsShared_target[CHANNELS][LEVELS];
-    __shared__ int histogramsShared_refrence[CHANNELS][LEVELS];
-    
-    Job job;
-    while(true) {
-        if(input->dequeue(&job)) {
-            process_image(job.target, job.reference, job.result, deleta_cdf_row, map_cdf, histogramsShared_target, histogramsShared_refrence);
-            output->enqueue(job);
-        }
-    }
-}
-
-
-// TODO implement a SPSC queue
-// TODO implement a function for calculating the threadblocks count
-
 typedef struct Job {
     int job_id;
     uchar* target;
@@ -298,10 +215,85 @@ typedef struct Job {
     uchar* result;
 }Job;
 
+class Que
+{
+private:    
+    Job que[QUE_MAX] = {0};
+    cuda::atomic<int> _head;
+    cuda::atomic<int> _tail;
+
+public:
+    __device__ __host__ void print() {
+        //printf("front:%d, size:%d\n", front_of_que%QUE_MAX, size);
+        printf("[%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d]\n", que[0].job_id,que[1].job_id,que[2].job_id,que[3].job_id,que[4].job_id,
+                                    que[5].job_id,que[6].job_id,que[7].job_id,que[8].job_id,que[9].job_id,
+                                    que[10].job_id,que[11].job_id,que[12].job_id,que[13].job_id,que[14].job_id,
+                                     que[15].job_id);
+    }
+
+    __device__ __host__  bool dequeue(Job* job) {
+        int head = _head.load(cuda::memory_order_relaxed);
+        if(_tail.load(cuda::memory_order_acquire) == head) {
+            _head.store(head, cuda::memory_order_release);
+            return false;
+        }
+        *job = que[head % QUE_MAX];
+        que[head % QUE_MAX] = {-1, NULL, NULL, NULL};
+        _head.store(head + 1, cuda::memory_order_release);
+        return true;
+    }
+
+    __device__ __host__ bool enqueue(Job& job) {
+        int tail = _tail.load(cuda::memory_order_relaxed);
+        if(tail - _head.load(cuda::memory_order_acquire) == QUE_MAX) {
+            _tail.store(tail, cuda::memory_order_release);
+            return false;
+        }
+        que[tail % QUE_MAX] = job;
+        _tail.store(tail + 1, cuda::memory_order_release);
+        return true;
+    }
+
+    __device__ __host__ bool enqueue(int job_id, uchar* target, uchar* reference, uchar* result) {
+        int tail = _tail.load(cuda::memory_order_relaxed);
+        if(tail - _head.load(cuda::memory_order_acquire) == QUE_MAX){
+            _tail.store(tail, cuda::memory_order_release);
+            return false;
+        }
+        que[tail % QUE_MAX] = {job_id, target, reference, result};;
+        _tail.store(tail + 1, cuda::memory_order_release);
+        return true;
+    }
+};
+
+__global__ void kernel(Que* que_host_to_gpu, Que* que_gpu_to_host)
+{
+    int tid = threadIdx.x;;
+    int threads = blockDim.x;
+    __shared__ int deleta_cdf_row[LEVELS];
+    __shared__ int map_cdf[CHANNELS][LEVELS];
+    __shared__ int histogramsShared_target[CHANNELS][LEVELS];
+    __shared__ int histogramsShared_refrence[CHANNELS][LEVELS];
+    
+    Job job;
+    while(true) {
+        if(que_host_to_gpu->dequeue(&job)) {
+            //que_host_to_gpu->print();
+            printf("JOB ID: %d OUT host_to_gpu\n", job.job_id);
+        }
+    }
+            // process_image(job.target, job.reference, job.result, deleta_cdf_row, map_cdf, histogramsShared_target, histogramsShared_refrence);
+            // que_gpu_to_host->enqueue(job);
+}
+
+
+// TODO implement a SPSC queue
+// TODO implement a function for calculating the threadblocks count
+
 class queue_server : public image_processing_server
 {
 private:
-    void* pinned_host_buffer;
+    char* pinned_host_buffer;
     Que* que_host_to_gpu;
     Que* que_gpu_to_host;
 public:
@@ -317,7 +309,7 @@ public:
         // Use placement new operator to construct our class on the pinned buffer
         que_host_to_gpu = new (pinned_host_buffer) Que();
         que_gpu_to_host = new (pinned_host_buffer + sizeof(Que)) Que();
-        kernel<<<threads, 1>>>(que_host_to_gpu, que_gpu_to_host);
+        kernel<<<1, 1>>>(que_host_to_gpu, que_gpu_to_host);
         // TODO initialize host state
         // TODO launch GPU persistent kernel with given number of threads, and calculated number of threadblocks
     }
@@ -332,16 +324,22 @@ public:
 
     bool enqueue(int job_id, uchar *target, uchar *reference, uchar *result) override
     {
-        return que_host_to_gpu->enqueue(job_id, target, reference, result);
+        assert(job_id != -1);
+        if(que_host_to_gpu->enqueue(job_id, target, reference, result)){
+            printf("JOB ID: %d IN host_to_gpu\n", job_id);
+            return true;
+        }
+        return false;
     }
 
-    bool dequeue(int *job_id) override
-    {
-        Job* job;
-        bool success = false;
-        if(que_gpu_to_host->dequeue(job)) {
-            *job_id = job->job_id;
-            success= true;
+    bool dequeue(int *job_id) override {
+        auto success = false;
+        Job job = {-1, NULL, NULL, NULL};
+        if(que_gpu_to_host->dequeue(&job)) {
+            success = true;
+            *job_id = job.job_id;
+            printf("%d out\n",*job_id);
+            assert(job.reference && job.result && job.target);
         }
         return success;
     }

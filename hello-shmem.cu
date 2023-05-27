@@ -1,73 +1,67 @@
 #include <iostream>
 #include <cuda/atomic>
 #include "ex2.h"
+#define QUE_MAX 16
 
 typedef struct Job {
-    char data;
-    // int job_id;
-    // uchar* target;
-    // uchar* reference;
-    // uchar* result;
+    int job_id;
+    uchar* target;
+    uchar* reference;
+    uchar* result;
 }Job;
 
 class Que
 {
-private:
-    // On each use of the flag, we switch the meaning of its values (true/false -> data is ready/not-ready)
-
-    cuda::atomic<bool> lock;
-    
-    static const int que_max = 16;
-    Job que[que_max];
-    int front_of_que = 0;
-    int size = 0;
+private:    
+    Job que[QUE_MAX] = {0};
+    cuda::atomic<int> _head;
+    cuda::atomic<int> _tail;
 
 public:
-    Que() : lock(false){
+    __device__ __host__ void print() {
+        cuda::atomic_thread_fence(cuda::memory_order_acquire, cuda::thread_scope_system);
+        return;
+        //printf("front:%d, size:%d\n", front_of_que%QUE_MAX, size);
+        printf("[%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d]\n", que[0].job_id,que[1].job_id,que[2].job_id,que[3].job_id,que[4].job_id,
+                                    que[5].job_id,que[6].job_id,que[7].job_id,que[8].job_id,que[9].job_id,
+                                    que[10].job_id,que[11].job_id,que[12].job_id,que[13].job_id,que[14].job_id,
+                                     que[15].job_id);
     }
 
-    __device__ __host__ bool dequeue(char* data)
-    {
-        bool success = false;
-        while (lock.exchange(true ,cuda::memory_order_relaxed) == false);
-        cuda::atomic_thread_fence(cuda::memory_order_acquire, cuda::thread_scope_system);
-        if(size) {
-            *data = que[front_of_que%que_max].data;
-            size -= 1;
-            front_of_que += 1;
-            success = true;
-        }
-        lock.store(false, cuda::memory_order_release);
-        return success;
+    __device__ __host__ void dequeue(Job* job) {
+        int head = _head.load(cuda::memory_order_relaxed);
+        while(_tail.load(cuda::memory_order_acquire) == head);
+        *job = que[head % QUE_MAX];
+        que[head % QUE_MAX] = {-1, NULL, NULL, NULL};
+        _head.store(head + 1, cuda::memory_order_release);
+        return;
     }
 
-    __device__ __host__ bool enqueue(char value)
-    {
-        while (lock.exchange(true ,cuda::memory_order_relaxed) == false);
-        cuda::atomic_thread_fence(cuda::memory_order_acquire, cuda::thread_scope_system);
+    __device__ __host__ void enqueue(Job& job) {
+        int tail = _tail.load(cuda::memory_order_relaxed);
+        while(tail - _head.load(cuda::memory_order_acquire) == QUE_MAX);
+        que[tail % QUE_MAX] = job;
+        _tail.store(tail + 1, cuda::memory_order_release);
+        return;
+    }
 
-        bool success = false;
-        if(size < que_max) {
-            que[(front_of_que + size)%que_max] = {value};
-            // que[front_of_que + size] = {job_id, target, reference, result};
-
-            size += 1;
-            success = true;
-        }
-        lock.store(false, cuda::memory_order_release);
-        return success;
+    __device__ __host__ void enqueue(int job_id, uchar* target, uchar* reference, uchar* result) {
+        int tail = _tail.load(cuda::memory_order_relaxed);
+        while(tail - _head.load(cuda::memory_order_acquire) == QUE_MAX);
+        que[tail % QUE_MAX] = {job_id, target, reference, result};;
+        _tail.store(tail + 1, cuda::memory_order_release);
+        return;
     }
 };
 
+
 __global__ void kernel(Que* shmem_input, Que* shmem_output)
 {
-    char c;
+    Job c;
     do {
-        auto result = shmem_input->dequeue(&c);
-        if(result) {
-            shmem_output->enqueue(c);
-        }
-    } while (c);
+        shmem_input->dequeue(&c);
+        shmem_output->enqueue(c);
+    } while (c.job_id);
 }
 
 int main(int argc, char* argv[]) {
@@ -80,7 +74,7 @@ int main(int argc, char* argv[]) {
     Que *que_gpu_to_host = new (pinned_host_buffer + sizeof(Que)) Que();
 
     bool verbose = true;
-    std::string message_to_gpu = "Hello shared memory!";
+    std::string message_to_gpu = "Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory! Hello shared memory!";
     size_t msg_len = message_to_gpu.length();
 
     if (argc > 1) {
@@ -97,15 +91,20 @@ int main(int argc, char* argv[]) {
     kernel<<<1, 1>>>(que_host_to_gpu, que_gpu_to_host);
 
     std::cout << "Writing message to GPU:" << std::endl;
+    size_t out = 0;
+    for (size_t in = 0; out < msg_len;) {
+        char c = message_to_gpu[in];
+        Job j = {(int)c, NULL, NULL, NULL};
+        que_gpu_to_host->enqueue(j);
+        in++;
 
-    for (size_t i = 0; i < msg_len; ++i) {
-        char c = message_to_gpu[i];
-        while(!que_host_to_gpu->enqueue(c));
-        while(!que_gpu_to_host->dequeue(&message_from_gpu[i]));
-        if (verbose)
-            std::cout << c << std::flush;
+        que_gpu_to_host->dequeue(&j);
+        message_from_gpu[out]= (char) j.job_id;
+        std::cout << message_from_gpu[out] << std::flush;
     }
-    que_host_to_gpu->enqueue(0);
+    Job n = {0, NULL, NULL, NULL};
+
+    que_host_to_gpu->enqueue(n);
 
     if (verbose)
         std::cout << "\nresult:\n" << message_from_gpu << std::endl;
