@@ -60,6 +60,15 @@ __device__ void zero_array(int* histograms, int size=CHANNELS*LEVELS) {
     }
 }
 
+__device__ void test_array(uchar* arr, int size) {
+    const int tid = threadIdx.x;
+    const int threads = blockDim.x;
+    for(int i = tid; i < size; i+=threads) {
+        arr[i] = arr[i];
+    }
+}
+
+
 __device__ void colorHist(uchar img[][CHANNELS], int histograms[][LEVELS]) {
     const int pic_size = SIZE * SIZE;
     const int tid = threadIdx.x;
@@ -68,12 +77,9 @@ __device__ void colorHist(uchar img[][CHANNELS], int histograms[][LEVELS]) {
     for (int i = tid; i < 3*pic_size; i+=threads) {
         const int color = i%3;
         const int pixel = i/3;
-        assert(pixel < pic_size);
-        int temp = img[pixel][color];
-        atomicAdd(&histograms[color][temp], 1);
+        atomicAdd(&histograms[color][img[pixel][color]], 1);
     }
 }
-
 
 __device__ void performMapping(int maps[][LEVELS], uchar targetImg[][CHANNELS], uchar resultImg[][CHANNELS]){
     int pixels = SIZE * SIZE;
@@ -94,15 +100,23 @@ __device__ void process_image(uchar *targets, uchar *references, uchar *results,
     int tid = threadIdx.x;;
     int threads = blockDim.x;
     int bid = blockIdx.x;
-    assert(targets && references && results);
+    assert(bid==0);
+    assert(tid < 256 );
+    assert(targets);
+    assert(references);
+    assert(results);
     zero_array((int*)histogramsShared_target,   CHANNELS * LEVELS);
     zero_array((int*)histogramsShared_refrence, CHANNELS * LEVELS);
     zero_array((int*)map_cdf,                   CHANNELS * LEVELS);
     zero_array((int*)deleta_cdf_row,            LEVELS);
 
-    auto target   = (uchar(*)[CHANNELS]) &targets;
-    auto refrence = (uchar(*)[CHANNELS]) &references;
-    auto result   = (uchar(*)[CHANNELS]) &results;
+    test_array(targets, img_size);
+    test_array(references, img_size);
+    test_array(results, img_size);
+
+    auto target   = (uchar(*)[CHANNELS]) targets;
+    auto refrence = (uchar(*)[CHANNELS]) references;
+    auto result   = (uchar(*)[CHANNELS]) results;
 
     colorHist(target, histogramsShared_target);
     colorHist(refrence, histogramsShared_refrence);
@@ -260,30 +274,49 @@ public:
             _tail.store(tail, cuda::memory_order_release);
             return false;
         }
+        assert(target);
+        assert(reference);
+        assert(result);
         que[tail % QUE_MAX] = {job_id, target, reference, result};;
         _tail.store(tail + 1, cuda::memory_order_release);
         return true;
     }
 };
 
-__global__ void kernel(Que* que_host_to_gpu, Que* que_gpu_to_host)
+__global__ void kernel(Que* que_host_to_gpu, Que* que_gpu_to_host, bool* running)
 {
     int tid = threadIdx.x;;
-    int threads = blockDim.x;
     __shared__ int deleta_cdf_row[LEVELS];
     __shared__ int map_cdf[CHANNELS][LEVELS];
     __shared__ int histogramsShared_target[CHANNELS][LEVELS];
     __shared__ int histogramsShared_refrence[CHANNELS][LEVELS];
-    
-    Job job;
-    while(true) {
-        if(que_host_to_gpu->dequeue(&job)) {
-            //que_host_to_gpu->print();
-            printf("JOB ID: %d OUT host_to_gpu\n", job.job_id);
-        }
+    __shared__ bool new_job;
+    __shared__ Job job;
+    if(tid == 0) {
+        new_job = false;
+        job = {-1, NULL,NULL,NULL};
     }
-            // process_image(job.target, job.reference, job.result, deleta_cdf_row, map_cdf, histogramsShared_target, histogramsShared_refrence);
-            // que_gpu_to_host->enqueue(job);
+    while(*running) {
+        if(tid == 0 && que_host_to_gpu->dequeue(&job)) {
+            //printf("JOB ID: %d OUT host_to_gpu\n", job.job_id);
+            new_job = true;
+        }
+        __syncthreads();
+        if(new_job) {
+            if (tid == 0) {
+                assert(job.target);
+                assert(job.reference);
+                assert(job.result);
+            }
+            process_image(job.target, job.reference, job.result, deleta_cdf_row, map_cdf, histogramsShared_target, histogramsShared_refrence);
+            if (tid == 0) {
+                que_gpu_to_host->enqueue(job);
+                new_job = false;
+            }
+        }
+        __syncthreads();
+    }
+
 }
 
 
@@ -296,6 +329,7 @@ private:
     char* pinned_host_buffer;
     Que* que_host_to_gpu;
     Que* que_gpu_to_host;
+    bool* running;
 public:
     // Job& operator[](int index) {
     //     return que[index % que_max];
@@ -306,27 +340,37 @@ public:
 
         // Allocate pinned host buffer for two shared_memory instances
         cudaMallocHost(&pinned_host_buffer, 2 * sizeof(Que));
+        cudaMallocHost(&running, sizeof(bool));
+
         // Use placement new operator to construct our class on the pinned buffer
         que_host_to_gpu = new (pinned_host_buffer) Que();
         que_gpu_to_host = new (pinned_host_buffer + sizeof(Que)) Que();
-        kernel<<<1, 1>>>(que_host_to_gpu, que_gpu_to_host);
+        running = new (running) bool(true);
+
+        kernel<<<1, 256>>>(que_host_to_gpu, que_gpu_to_host, running);
         // TODO initialize host state
         // TODO launch GPU persistent kernel with given number of threads, and calculated number of threadblocks
     }
 
     ~queue_server() override {
+        printf("SHUTTING DOWN SERVER\n");
+        *running = false;
+        cudaDeviceSynchronize();
+        printf("SHUTTING DOWN SERVER 2\n");
+
         que_host_to_gpu->~Que();
         que_gpu_to_host->~Que();
         auto err = cudaFreeHost(pinned_host_buffer);
         assert(err == cudaSuccess);
-        cudaDeviceReset();
+        err = cudaFreeHost(running);
+        assert(err == cudaSuccess);
     }
 
     bool enqueue(int job_id, uchar *target, uchar *reference, uchar *result) override
     {
         assert(job_id != -1);
         if(que_host_to_gpu->enqueue(job_id, target, reference, result)){
-            printf("JOB ID: %d IN host_to_gpu\n", job_id);
+            //printf("JOB ID: %d IN host_to_gpu\n", job_id);
             return true;
         }
         return false;
@@ -338,7 +382,7 @@ public:
         if(que_gpu_to_host->dequeue(&job)) {
             success = true;
             *job_id = job.job_id;
-            printf("%d out\n",*job_id);
+            //printf("JOB ID: %d OUT gpu_to_host\n", job.job_id);
             assert(job.reference && job.result && job.target);
         }
         return success;
