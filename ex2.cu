@@ -285,19 +285,21 @@ public:
 
 __global__ void kernel(Que* que_host_to_gpu, Que* que_gpu_to_host, bool* running)
 {
-    int tid = threadIdx.x;;
+    int bid = blockIdx.x;
+    int tid = threadIdx.x;
     __shared__ int deleta_cdf_row[LEVELS];
     __shared__ int map_cdf[CHANNELS][LEVELS];
     __shared__ int histogramsShared_target[CHANNELS][LEVELS];
     __shared__ int histogramsShared_refrence[CHANNELS][LEVELS];
     __shared__ bool new_job;
     __shared__ Job job;
+
     if(tid == 0) {
         new_job = false;
         job = {-1, NULL,NULL,NULL};
     }
     while(*running) {
-        if(tid == 0 && que_host_to_gpu->dequeue(&job)) {
+        if(tid == 0 && que_host_to_gpu[bid].dequeue(&job)) {
             //printf("JOB ID: %d OUT host_to_gpu\n", job.job_id);
             new_job = true;
         }
@@ -310,7 +312,7 @@ __global__ void kernel(Que* que_host_to_gpu, Que* que_gpu_to_host, bool* running
             }
             process_image(job.target, job.reference, job.result, deleta_cdf_row, map_cdf, histogramsShared_target, histogramsShared_refrence);
             if (tid == 0) {
-                que_gpu_to_host->enqueue(job);
+                que_gpu_to_host[bid].enqueue(job);
                 new_job = false;
             }
         }
@@ -320,8 +322,12 @@ __global__ void kernel(Que* que_host_to_gpu, Que* que_gpu_to_host, bool* running
 }
 
 
-// TODO implement a SPSC queue
 // TODO implement a function for calculating the threadblocks count
+__host__
+int calculate_blocks_num(int threads) {
+    return 2;
+}
+
 
 class queue_server : public image_processing_server
 {
@@ -337,27 +343,24 @@ public:
 
 
     queue_server(int threads) {
-
-        // Allocate pinned host buffer for two shared_memory instances
-        cudaMallocHost(&pinned_host_buffer, 2 * sizeof(Que));
+        int blocks = calculate_blocks_num(threads);
+        cudaMallocHost(&pinned_host_buffer, 2 * blocks * sizeof(Que));
         cudaMallocHost(&running, sizeof(bool));
 
         // Use placement new operator to construct our class on the pinned buffer
-        que_host_to_gpu = new (pinned_host_buffer) Que();
-        que_gpu_to_host = new (pinned_host_buffer + sizeof(Que)) Que();
+        for(int i = 0; i < 2 * blocks; i++) {
+            new (pinned_host_buffer + i * sizeof(Que)) Que();
+        }
+        que_host_to_gpu = (Que*) pinned_host_buffer; 
+        que_gpu_to_host = (Que*) (pinned_host_buffer + blocks * sizeof(Que));
         running = new (running) bool(true);
 
-        kernel<<<1, 256>>>(que_host_to_gpu, que_gpu_to_host, running);
-        // TODO initialize host state
-        // TODO launch GPU persistent kernel with given number of threads, and calculated number of threadblocks
+        kernel<<<blocks, 256>>>(que_host_to_gpu, que_gpu_to_host, running);
     }
 
     ~queue_server() override {
-        printf("SHUTTING DOWN SERVER\n");
         *running = false;
         cudaDeviceSynchronize();
-        printf("SHUTTING DOWN SERVER 2\n");
-
         que_host_to_gpu->~Que();
         que_gpu_to_host->~Que();
         auto err = cudaFreeHost(pinned_host_buffer);

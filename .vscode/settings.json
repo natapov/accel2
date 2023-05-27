@@ -13,6 +13,7 @@
         "unordered_map": "cpp",
         "tuple": "cpp",
         "functional": "cpp",
-        "utility": "cpp"
+        "utility": "cpp",
+        "new": "cpp"
     }
 }
