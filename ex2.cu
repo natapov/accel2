@@ -1,12 +1,14 @@
 #include "ex2.h"
 #include <cuda/atomic>
+#include <queue>
 using namespace std;
 
 #define NUM_STREAMS 64
 #define QUE_MAX 16
+const int img_size = SIZE * SIZE * CHANNELS;
 
 // Our functions from ex 1
-const int img_size = SIZE * SIZE * CHANNELS;
+
 __device__ void prefixSum(int arr[], int size, int tid, int threads) {
     int increment;
     const auto is_active = tid < size;
@@ -81,6 +83,7 @@ __device__ void colorHist(uchar img[][CHANNELS], int histograms[][LEVELS]) {
     }
 }
 
+
 __device__ void performMapping(int maps[][LEVELS], uchar targetImg[][CHANNELS], uchar resultImg[][CHANNELS]){
     int pixels = SIZE * SIZE;
     const int tid = threadIdx.x;
@@ -110,9 +113,6 @@ __device__ void process_image(uchar *targets, uchar *references, uchar *results,
     zero_array((int*)map_cdf,                   CHANNELS * LEVELS);
     zero_array((int*)deleta_cdf_row,            LEVELS);
 
-    test_array(targets, img_size);
-    test_array(references, img_size);
-    test_array(results, img_size);
 
     auto target   = (uchar(*)[CHANNELS]) targets;
     auto refrence = (uchar(*)[CHANNELS]) references;
@@ -162,27 +162,31 @@ class streams_server : public image_processing_server
 {
 private:
     // TODO define stream server context (memory buffers, streams, etc...)
-    int current_stream;
+    int job_id_arr[NUM_STREAMS];
     cudaStream_t streams[NUM_STREAMS];
+    queue<int> free_stream;
 
+    uchar *target_single   = nullptr;
+    uchar *refrence_single = nullptr;
+    uchar *result_single   = nullptr;
 
 public:
     streams_server()
     {
         // TODO initialize context (memory buffers, streams, etc...)
-        current_stream=0;
-        
-
         for (int i = 0; i < NUM_STREAMS; i++) {
         cudaStreamCreate(&streams[i]);
-
+            job_id_arr[i]=-1;
+            free_stream.push(i);
         }
+        CUDA_CHECK( cudaMalloc((void**)&(target_single),   img_size) ); 
+        CUDA_CHECK( cudaMalloc((void**)&(refrence_single), img_size) ); 
+        CUDA_CHECK( cudaMalloc((void**)&(result_single),   img_size) ); 
     }
 
     ~streams_server() override
     {
         // TODO free resources allocated in constructor
-        
         for (int i = 0; i < NUM_STREAMS; i++) {
             cudaStreamDestroy(streams[i]);
         }
@@ -190,22 +194,42 @@ public:
 
     bool enqueue(int job_id, uchar *target, uchar *reference, uchar *result) override
     {
+        int num_stream;
         // TODO place memory transfers and kernel invocation in streams if possible.
+        if (!free_stream.empty())
+        {
+            num_stream=free_stream.front();
+            free_stream.pop();
+            job_id_arr[num_stream]=job_id;
+            //printf("job id enqueue: %d",job_id);
+            CUDA_CHECK( cudaMemcpy(target_single,   target,   img_size, cudaMemcpyHostToDevice) );
+            CUDA_CHECK( cudaMemcpy(refrence_single, reference, img_size, cudaMemcpyHostToDevice) );
+            process_image_kernel<<<1,1024,0,streams[num_stream]>>>(target_single,refrence_single,result_single);
+            cudaError_t error=cudaGetLastError();
+            if (error!=cudaSuccess) 
+            {
+                fprintf(stderr,"Kernel execution failed:%s\n",cudaGetErrorString(error));
+                return 1;
+            }
+            CUDA_CHECK(cudaMemcpy(result,result_single, img_size, cudaMemcpyDeviceToHost) );
+            return true;
+        }
         return false;
     }
 
     bool dequeue(int *job_id) override
     {
-        return false;
-
-        // TODO query (don't block) streams for any completed requests.
-        //for ()
-        //{
-            cudaError_t status = cudaStreamQuery(0); // TODO query diffrent stream each iteration
+        
+        for (int i=0;i<NUM_STREAMS;i++)
+        {
+            cudaError_t status = cudaStreamQuery(streams[i]); // TODO query diffrent stream each iteration
             switch (status) {
             case cudaSuccess:
-                // TODO return the img_id of the request that was completed.
-                //*img_id = ...
+                    if(job_id_arr[i]==-1)
+                        continue;
+                    *job_id=job_id_arr[i];
+                    job_id_arr[i]=-1;
+                    free_stream.push(i);
                 return true;
             case cudaErrorNotReady:
                 return false;
@@ -213,7 +237,8 @@ public:
                 CUDA_CHECK(status);
                 return false;
             }
-        //}
+        }
+        return false;
     }
 };
 
@@ -370,7 +395,6 @@ public:
         int blocks = calculate_blocks_num(threads);
         cudaMallocHost(&pinned_host_buffer, 2 * blocks * sizeof(Que));
         cudaMallocHost(&running, sizeof(bool));
-        printf("NUMBER OF BLOCKS: %d\n", blocks);
         // Use placement new operator to construct our class on the pinned buffer
         for(int i = 0; i < 2 * blocks; i++) {
             new (pinned_host_buffer + i * sizeof(Que)) Que();

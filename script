@@ -1,0 +1,4 @@
+for i in {148..2960..148}
+do
+   ./ex2 queue 256 $i
+done
