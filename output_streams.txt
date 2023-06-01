@@ -1,0 +1,320 @@
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1192.620444 [msec]
+
+=== CPU ===
+total time 2788.332053 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 103.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 100.9 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+     75.5658      0.9519      9.2303   1053.5097   1148.5901
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1194.365026 [msec]
+
+=== CPU ===
+total time 2786.459624 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 206.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 163.9 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+      7.7337      0.9527      8.0446     15.0622     16.3092
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1192.803684 [msec]
+
+=== CPU ===
+total time 2788.345538 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 309.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 298.0 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+    249.8845      0.9525     10.6135   1679.5216   1774.6333
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1195.539834 [msec]
+
+=== CPU ===
+total time 2786.843541 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 412.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 461.4 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+    367.0574      0.9515     83.4473   1705.2944   1800.3815
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1193.895157 [msec]
+
+=== CPU ===
+total time 2784.828275 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 515.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 514.1 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+    332.2968      0.9514     14.9772   1688.0743   1783.0484
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1195.456080 [msec]
+
+=== CPU ===
+total time 2785.820524 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 618.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 560.5 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+    330.3658      0.9512     12.7017   1694.7317   1789.7004
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1191.911839 [msec]
+
+=== CPU ===
+total time 2784.767654 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 721.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 661.8 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+    617.1440      0.9587    332.5493   2524.5725   2620.2066
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1195.280421 [msec]
+
+=== CPU ===
+total time 2787.516877 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 824.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 846.7 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+    761.1109      0.9598    741.2639   2339.9546   2435.5629
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1227.115711 [msec]
+
+=== CPU ===
+total time 2788.142673 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 927.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 998.9 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+   2213.4788      0.9595   2546.9194   4106.6305   4198.4462
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1195.167467 [msec]
+
+=== CPU ===
+total time 2787.866077 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 1030.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 1018.3 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+   2580.1298      1.0710   3162.7222   4275.6264   4371.2899
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1195.677746 [msec]
+
+=== CPU ===
+total time 2787.224792 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 1133.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 1020.1 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+   2957.4553      0.9650   3466.7733   4922.5868   4986.4152
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1193.663115 [msec]
+
+=== CPU ===
+total time 2787.194342 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 1236.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 1020.1 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+   3366.1367      0.9736   3516.2887   5804.1904   5887.3856
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1193.775594 [msec]
+
+=== CPU ===
+total time 2784.797987 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 1339.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 1019.9 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+   3670.9741      0.9661   3672.2370   6737.1514   6830.0539
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1194.525586 [msec]
+
+=== CPU ===
+total time 2786.584371 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 1442.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 1019.9 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+   3762.7039      0.9679   3672.6635   7384.6969   7480.4768
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1195.892704 [msec]
+
+=== CPU ===
+total time 2787.697762 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 1545.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 1019.6 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+   3740.2663      0.9612   3654.3605   7376.1879   7471.8495
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1192.782988 [msec]
+
+=== CPU ===
+total time 2782.566430 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 1648.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 1019.6 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+   3741.1854      0.9615   3654.6558   7375.3627   7471.0517
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1195.401449 [msec]
+
+=== CPU ===
+total time 2789.048256 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 1751.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 1019.8 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+   3858.4402      0.9621   3953.7774   7679.4470   7775.0779
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1195.679965 [msec]
+
+=== CPU ===
+total time 2788.408703 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 1854.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 1019.6 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+   3856.6238      0.9623   3953.4354   7663.9662   7759.7187
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1193.628379 [msec]
+
+=== CPU ===
+total time 2788.141911 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 1957.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 1019.4 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+   3858.0137      0.9603   3957.5682   7684.9462   7780.5698
+Number of devices: 1
+
+=== Randomizing images ===
+total time 1194.939564 [msec]
+
+=== CPU ===
+total time 2783.939456 [msec]
+
+=== Client-Server ===
+mode = streams
+load = 2060.0 (req/sec)
+distance from baseline 0 (should be zero)
+throughput = 1019.3 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+   3854.9019      0.9620   3953.5287   7675.2763   7770.9375

@@ -101,7 +101,6 @@ __global__
 void process_image_kernel(uchar *targets, uchar *references, uchar *results) {
     int tid = threadIdx.x;;
     int threads = blockDim.x;
-    int bid = blockIdx.x;
     __shared__ int deleta_cdf_row[LEVELS];
     __shared__ int map_cdf[CHANNELS][LEVELS];
     __shared__ int histogramsShared_target[CHANNELS][LEVELS];
@@ -111,9 +110,9 @@ void process_image_kernel(uchar *targets, uchar *references, uchar *results) {
     zero_array((int*)map_cdf,                   CHANNELS * LEVELS);
     zero_array((int*)deleta_cdf_row,            LEVELS);
 
-    auto target   = (uchar(*)[CHANNELS]) &targets[  bid * img_size];
-    auto reference = (uchar(*)[CHANNELS]) &references[bid * img_size];
-    auto result   = (uchar(*)[CHANNELS]) &results[  bid * img_size];
+    auto target    = (uchar(*)[CHANNELS]) targets;
+    auto reference = (uchar(*)[CHANNELS]) references;
+    auto result    = (uchar(*)[CHANNELS]) results;
 
     colorHist(target, histogramsShared_target);
     colorHist(reference, histogramsShared_refrence);
@@ -151,8 +150,6 @@ __device__
 void process_image(uchar *targets, uchar *references, uchar *results, int deleta_cdf_row[LEVELS], int map_cdf[][LEVELS], int histogramsShared_target[][LEVELS], int histogramsShared_refrence[][LEVELS]) {
     int tid = threadIdx.x;;
     int threads = blockDim.x;
-    int bid = blockIdx.x;
-    assert(bid==0);
     assert(tid < 256 );
     assert(targets);
     assert(references);
@@ -162,9 +159,9 @@ void process_image(uchar *targets, uchar *references, uchar *results, int deleta
     zero_array((int*)map_cdf,                   CHANNELS * LEVELS);
     zero_array((int*)deleta_cdf_row,            LEVELS);
 
-    auto target    = (uchar(*)[CHANNELS]) &targets   [bid * img_size];
-    auto reference = (uchar(*)[CHANNELS]) &references[bid * img_size];
-    auto result    = (uchar(*)[CHANNELS]) &results   [bid * img_size];
+    auto target    = (uchar(*)[CHANNELS]) targets;
+    auto reference = (uchar(*)[CHANNELS]) references;
+    auto result    = (uchar(*)[CHANNELS]) results;
 
     colorHist(target, histogramsShared_target);
     colorHist(reference, histogramsShared_refrence);
@@ -228,6 +225,9 @@ public:
         for (int i = 0; i < NUM_STREAMS; i++) {
             cudaStreamDestroy(streams[i]);
         }
+        CUDA_CHECK( cudaFree(target_single) ); 
+        CUDA_CHECK( cudaFree(refrence_single) ); 
+        CUDA_CHECK( cudaFree(result_single) ); 
     }
 
     bool enqueue(int job_id, uchar *target, uchar *reference, uchar *result) override
@@ -423,6 +423,7 @@ private:
     Que* que_host_to_gpu;
     Que* que_gpu_to_host;
     bool* running;
+    int blocks;
 public:
     // Job& operator[](int index) {
     //     return que[index % que_max];
@@ -430,7 +431,7 @@ public:
 
 
     queue_server(int threads) {
-        int blocks = calculate_blocks_num(threads);
+        blocks = calculate_blocks_num(threads);
         cudaMallocHost(&pinned_host_buffer, 2 * blocks * sizeof(Que));
         cudaMallocHost(&running, sizeof(bool));
         // Use placement new operator to construct our class on the pinned buffer
@@ -458,23 +459,24 @@ public:
     bool enqueue(int job_id, uchar *target, uchar *reference, uchar *result) override
     {
         assert(job_id != -1);
-        if(que_host_to_gpu->enqueue(job_id, target, reference, result)){
-            //printf("JOB ID: %d IN host_to_gpu\n", job_id);
-            return true;
+        for(int i = 0; i < blocks; i++){
+            if(que_host_to_gpu[i].enqueue(job_id, target, reference, result)){
+                return true;
+            }
         }
         return false;
     }
 
     bool dequeue(int *job_id) override {
-        auto success = false;
         Job job = {-1, NULL, NULL, NULL};
-        if(que_gpu_to_host->dequeue(&job)) {
-            success = true;
-            *job_id = job.job_id;
-            //printf("JOB ID: %d OUT gpu_to_host\n", job.job_id);
-            assert(job.reference && job.result && job.target);
+        for(int i = 0; i < blocks; i++){
+            if(que_gpu_to_host[i].dequeue(&job)) {
+                *job_id = job.job_id;
+                //assert(job.reference && job.result && job.target);
+                return true;
+            }
         }
-        return success;
+        return false;
     }
 };
 

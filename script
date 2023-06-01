@@ -1,4 +1,4 @@
-for i in {148..2960..148}
+for i in {103..2060..103}
 do
-   ./ex2 queue 256 $i
+   ./ex2 queues $i
 done
