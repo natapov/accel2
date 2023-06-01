@@ -97,9 +97,58 @@ __device__ void performMapping(int maps[][LEVELS], uchar targetImg[][CHANNELS], 
         }
     }    
 }
+__global__
+void process_image_kernel(uchar *targets, uchar *references, uchar *results) {
+    int tid = threadIdx.x;;
+    int threads = blockDim.x;
+    int bid = blockIdx.x;
+    __shared__ int deleta_cdf_row[LEVELS];
+    __shared__ int map_cdf[CHANNELS][LEVELS];
+    __shared__ int histogramsShared_target[CHANNELS][LEVELS];
+    __shared__ int histogramsShared_refrence[CHANNELS][LEVELS];
+    zero_array((int*)histogramsShared_target,   CHANNELS * LEVELS);
+    zero_array((int*)histogramsShared_refrence, CHANNELS * LEVELS);
+    zero_array((int*)map_cdf,                   CHANNELS * LEVELS);
+    zero_array((int*)deleta_cdf_row,            LEVELS);
+
+    auto target   = (uchar(*)[CHANNELS]) &targets[  bid * img_size];
+    auto reference = (uchar(*)[CHANNELS]) &references[bid * img_size];
+    auto result   = (uchar(*)[CHANNELS]) &results[  bid * img_size];
+
+    colorHist(target, histogramsShared_target);
+    colorHist(reference, histogramsShared_refrence);
+    __syncthreads();
+
+    for(int c=0; c < CHANNELS; c++)
+    {   
+        prefixSum(histogramsShared_target[c],LEVELS, threadIdx.x, blockDim.x);
+        prefixSum(histogramsShared_refrence[c], LEVELS, threadIdx.x, blockDim.x);
+        __syncthreads();
+
+        for (int i = 0; i < LEVELS; i+=1) {
+            for (int j = tid; j < LEVELS; j+=threads) {
+                deleta_cdf_row[j] = abs(histogramsShared_target[c][i]-histogramsShared_refrence[c][j]);
+            }
+            __syncthreads();
+            argmin(deleta_cdf_row, LEVELS, threadIdx.x, blockDim.x);
+            __syncthreads();
+
+            map_cdf[c][i] = deleta_cdf_row[1];
+
+            __syncthreads();
+        }
+        __syncthreads();
+    }          
+
+    //Preform Map
+    performMapping(map_cdf, target, result); 
+    __syncthreads(); 
+}
+
 // Our functions from ex 1 end
 
-__device__ void process_image(uchar *targets, uchar *references, uchar *results, int deleta_cdf_row[LEVELS], int map_cdf[][LEVELS], int histogramsShared_target[][LEVELS], int histogramsShared_refrence[][LEVELS]) {
+__device__ 
+void process_image(uchar *targets, uchar *references, uchar *results, int deleta_cdf_row[LEVELS], int map_cdf[][LEVELS], int histogramsShared_target[][LEVELS], int histogramsShared_refrence[][LEVELS]) {
     int tid = threadIdx.x;;
     int threads = blockDim.x;
     int bid = blockIdx.x;
@@ -113,10 +162,9 @@ __device__ void process_image(uchar *targets, uchar *references, uchar *results,
     zero_array((int*)map_cdf,                   CHANNELS * LEVELS);
     zero_array((int*)deleta_cdf_row,            LEVELS);
 
-
-    auto target   = (uchar(*)[CHANNELS]) targets;
-    auto refrence = (uchar(*)[CHANNELS]) references;
-    auto result   = (uchar(*)[CHANNELS]) results;
+    auto target   = (uchar(*)[CHANNELS]) &targets   [bid * img_size];
+    auto refrence = (uchar(*)[CHANNELS]) &references[bid * img_size];
+    auto result   = (uchar(*)[CHANNELS]) &results   [bid * img_size];
 
     colorHist(target, histogramsShared_target);
     colorHist(refrence, histogramsShared_refrence);
@@ -146,16 +194,6 @@ __device__ void process_image(uchar *targets, uchar *references, uchar *results,
     //Preform Map
     performMapping(map_cdf, target, result); 
     __syncthreads(); 
-}
-
-__global__
-void process_image_kernel(uchar *targets, uchar *references, uchar *results){
-    __shared__ int deleta_cdf_row[LEVELS];
-    __shared__ int map_cdf[CHANNELS][LEVELS];
-    __shared__ int histogramsShared_target[CHANNELS][LEVELS];
-    __shared__ int histogramsShared_refrence[CHANNELS][LEVELS];
-
-    process_image(targets, references, results, deleta_cdf_row, map_cdf, histogramsShared_target, histogramsShared_refrence);
 }
 
 class streams_server : public image_processing_server
