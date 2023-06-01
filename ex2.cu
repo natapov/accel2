@@ -162,12 +162,12 @@ void process_image(uchar *targets, uchar *references, uchar *results, int deleta
     zero_array((int*)map_cdf,                   CHANNELS * LEVELS);
     zero_array((int*)deleta_cdf_row,            LEVELS);
 
-    auto target   = (uchar(*)[CHANNELS]) &targets   [bid * img_size];
-    auto refrence = (uchar(*)[CHANNELS]) &references[bid * img_size];
-    auto result   = (uchar(*)[CHANNELS]) &results   [bid * img_size];
+    auto target    = (uchar(*)[CHANNELS]) &targets   [bid * img_size];
+    auto reference = (uchar(*)[CHANNELS]) &references[bid * img_size];
+    auto result    = (uchar(*)[CHANNELS]) &results   [bid * img_size];
 
     colorHist(target, histogramsShared_target);
-    colorHist(refrence, histogramsShared_refrence);
+    colorHist(reference, histogramsShared_refrence);
     __syncthreads();
 
     for(int c=0; c < CHANNELS; c++)
